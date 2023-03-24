@@ -75,10 +75,10 @@ class ImageClassifier(nn.Module):
         self.bn2 = nn.BatchNorm2d(32)
         self.relu2 = nn.ReLU()
         self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)
-        self.fc1 = nn.Linear(75 * 100 * 32, 512)
+        self.fc1 = nn.Linear(75 * 50 * 32, 512)
         self.relu3 = nn.ReLU()
         self.dropout = nn.Dropout(0.5)
-        self.fc2 = nn.Linear(512, 102)
+        self.fc2 = nn.Linear(512, 101)
 
     def forward(self, x):
         x = self.conv1(x)
@@ -89,7 +89,7 @@ class ImageClassifier(nn.Module):
         x = self.bn2(x)
         x = self.relu2(x)
         x = self.pool2(x)
-        x = x.view(-1, 75 * 100 * 32)
+        x = x.view(-1, 75 * 50 * 32)
         x = self.fc1(x)
         x = self.relu3(x)
         x = self.dropout(x)
@@ -100,9 +100,7 @@ class ImageClassifier(nn.Module):
 class MyDataset(Dataset):
     def __init__(self, X, Y):
         self.X = torch.tensor(X, dtype=torch.float32)
-        self.Y = torch.from_numpy(Y.toarray()).to_sparse()
-        #self.Y = torch.sparse.Tensor(Y, dtype=torch.long)
-        #self.Y = torch.tensor(Y, dtype=torch.long)
+        self.Y = torch.tensor(Y, dtype=torch.float32)
 
     def __len__(self):
         return self.X.shape[0]
@@ -159,6 +157,10 @@ if __name__ == '__main__':
     X_train, X_validation, Y_train, Y_validation = train_test_split(X_normalized, Y_one_hot, test_size=0.25,
                                                                     random_state=42)
 
+    Y_train = Y_train.toarray()
+    X_train = X_train.transpose((0, 3, 1, 2))
+    print(type(X_train))
+    print(type(Y_train))
     train_dataset = MyDataset(X_train, Y_train)
 
 ## our data is now ready #####################
@@ -202,10 +204,10 @@ if __name__ == '__main__':
             loss.backward()
             optimizer.step()
             running_loss += loss.item()
-            if (i + 1) % 100 == 0:
-                print(
-                    f'Epoch [{epoch + 1}/{num_epochs}], Step [{i + 1}/{len(train_dataloader)}], Loss: {running_loss / 100:.4f}')
-                running_loss = 0.0
+            #if (i + 1) % 100 == 0:
+            print(
+                f'Epoch [{epoch + 1}/{num_epochs}], Step [{i + 1}/{len(train_dataloader)}], Loss: {running_loss / 100:.4f}')
+            running_loss = 0.0
 
     print("here2")
 """
