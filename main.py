@@ -17,10 +17,11 @@ import operator
 from sklearn.preprocessing import LabelEncoder, OneHotEncoder
 from torch.utils.data import Dataset, DataLoader
 
-#used the best of both of theses:
-# https://github.com/gabrieletiboni/Image-classification-on-Caltech101-using-CNNs/blob/master/CODE/Homework2_MLDL.ipynb
-# https://github.com/bhavul/Caltech-101-Object-Classification/blob/master/caltech-experiment.ipynb
-#(had many problems to fix in pycharm)
+from torchvision.models import alexnet
+from torchvision.models import vgg16
+from torchvision.models import resnet18, resnet50
+
+
 
 def get_images(object_category, data_directory):
     if (not os.path.exists(data_directory)):
@@ -31,9 +32,10 @@ def get_images(object_category, data_directory):
     return images
 
 def read_image(image_path):
+    print(image_path)
     """Read and resize individual images - Caltech 101 avg size of image is 300x200, so we resize accordingly"""
     img = cv2.imread(image_path, cv2.IMREAD_COLOR)
-    img = cv2.resize(img, (300,200), interpolation=cv2.INTER_CUBIC)
+    img = cv2.resize(img, (224,224), interpolation=cv2.INTER_CUBIC)
     return img
 
 def return_images_per_category(data_directory):
@@ -46,7 +48,7 @@ def return_images_per_category(data_directory):
 
 def create_training_data(data_directory):
     i = 0
-    X = np.ndarray((8677, 200, 300, 3), dtype=np.uint8)
+    X = np.ndarray((8677, 224, 224, 3), dtype=np.uint8)
     Y = []
     print("Preparing X and Y for dataset...")
     for category,_ in return_images_per_category(data_directory):
@@ -57,6 +59,7 @@ def create_training_data(data_directory):
             if not image.endswith('.jpg'):
                 # to escape hidden ipynb checkpoints and other unnecessary files
                 continue
+            resized = Image.fromarray(read_image(image)).resize((224, 224))
             X[i] = read_image(image)
             Y.insert(i,category)
             i += 1
@@ -167,30 +170,14 @@ if __name__ == '__main__':
 
 
 
-    # Define the data transformation pipeline
-    transform = transforms.Compose([
-        transforms.Resize((200, 300)),
-        transforms.ToTensor(),
-    ])
-
     batch_size = 32
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
+    vgg = vgg16(pretrained=True).classifier
 
+    print(vgg(torch.tensor(X_train, dtype=torch.float32)))
 
-
-
-
-
-
-
-
-
-
-
-
-
-    model = ImageClassifier()
+    """model = ImageClassifier()
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 
@@ -210,7 +197,7 @@ if __name__ == '__main__':
             running_loss = 0.0
 
     print("here2")
-"""
+
 
   imgplot = plt.imshow(X_train[6001])
     plt.show()
