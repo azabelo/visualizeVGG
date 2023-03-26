@@ -1,12 +1,63 @@
-import torch
 import torchvision.models as models
-import torchvision.transforms as transforms
-from PIL import Image
 import urllib.request
-from matplotlib import pyplot as plt
-from torch.nn import Module
 import torchsummary
-import numpy
+import torch
+from torchvision import transforms
+from matplotlib import pyplot as plt
+from torchvision.datasets import Caltech101
+from PIL import Image
+import os
+import operator
+import cv2
+import numpy as np
+
+def get_images(object_category, data_directory):
+    if (not os.path.exists(data_directory)):
+        print("Data directory not found. Are you sure you downloaded and extracted dataset properly?")
+        return
+    obj_category_dir = os.path.join(os.path.join(data_directory,"101_ObjectCategories"),object_category)
+    images = [os.path.join(obj_category_dir,img) for img in os.listdir(obj_category_dir)]
+    return images
+
+def read_image(image_path):
+    """Read and resize individual images - Caltech 101 avg size of image is 300x200, so we resize accordingly"""
+    img = cv2.imread(image_path, cv2.IMREAD_COLOR)
+    img = cv2.resize(img, (224,224), interpolation=cv2.INTER_CUBIC)
+    return img
+
+def return_images_per_category(data_directory):
+    categories = os.listdir(data_directory+"/101_ObjectCategories/")
+    object_images_count_dict = {}
+    for category in categories:
+        object_images_count_dict[category] = len(os.listdir(data_directory+"/101_ObjectCategories/"+category))
+    object_images_count_dict = sorted(object_images_count_dict.items(), key=operator.itemgetter(1), reverse=True)
+    return object_images_count_dict
+
+def create_training_data(data_directory):
+    i = 0
+    X = np.ndarray((8677, 224, 224, 3), dtype=np.uint8)
+    Y = []
+    print("Preparing X and Y for dataset...")
+    for category,_ in return_images_per_category(data_directory):
+        if category == 'BACKGROUND_Google':
+            continue
+        print("Processing images of ",category)
+        for image in get_images(category, data_directory):
+            if not image.endswith('.jpg'):
+                # to escape hidden ipynb checkpoints and other unnecessary files
+                continue
+            resized = Image.fromarray(read_image(image)).resize((224, 224))
+            X[i] = read_image(image)
+            Y.insert(i,category)
+            i += 1
+        print("Images processed : ",i+1," of 8678")
+    print("Datasets constructed")
+    return X,Y
+
+
+dataset = Caltech101(root = "./", download=True)
+X, _ = create_training_data('./Caltech101')
+
 
 
 vgg16 = models.vgg16(pretrained=True)
@@ -29,7 +80,8 @@ transform = transforms.Compose([
 ])
 
 # Load image and apply transformations
-image = Image.open('Caltech101/101_ObjectCategories/airplanes/image_0548.jpg')
+imageIndex = 8000
+image = Image.fromarray(X[imageIndex])
 image_tensor = transform(image)
 
 # Add batch dimension to image tensor

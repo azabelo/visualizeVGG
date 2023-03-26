@@ -32,7 +32,6 @@ def get_images(object_category, data_directory):
     return images
 
 def read_image(image_path):
-    print(image_path)
     """Read and resize individual images - Caltech 101 avg size of image is 300x200, so we resize accordingly"""
     img = cv2.imread(image_path, cv2.IMREAD_COLOR)
     img = cv2.resize(img, (224,224), interpolation=cv2.INTER_CUBIC)
