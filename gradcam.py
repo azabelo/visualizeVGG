@@ -90,7 +90,7 @@ print(vgg_Classifier)
 transform = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    #transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 ])
 
 #image from Caltech101
@@ -98,13 +98,14 @@ transform = transforms.Compose([
 #image = Image.fromarray(X[imageIndex])
 
 # or use url:
-# elephant
-url = "https://i.imgur.com/Bvro0YD.png"
+
 #bus next to car
 url = "https://www.gannett-cdn.com/authoring/2019/12/06/NRCD/ghows-SR-99121660-4c3b-12cb-e053-0100007f872c-63f1b23a.jpeg?width=660&height=471&fit=crop&format=pjpg&auto=webp"
 #two cars
 url = "https://i2-prod.gazettelive.co.uk/incoming/article15379246.ece/ALTERNATES/s615/1_Aston_Martin_Vantage__DB11_Volante-1.jpg"
-
+# elephant
+url = "https://i.imgur.com/Bvro0YD.png"
+#url = "https://hips.hearstapps.com/hmg-prod/images/p90475606-highres-rolls-royce-phantom-1677268219.jpg?crop=0.663xw:0.496xh;0.136xw,0.372xh&resize=1200:*"
 with urllib.request.urlopen(url) as url:
     image = Image.open(url)
 
@@ -147,26 +148,31 @@ class_idx = top_predictions.indices[0][nth_Best]
 grads = torch.autograd.grad(outputs=classifierOutput[:, class_idx], inputs=convOutput, grad_outputs=torch.ones_like(classifierOutput[:, class_idx]), create_graph=True)
 grads = grads[0].detach()
 
-averagedGrads = torch.mean(grads, dim=1)
+
+
+averagedGrads = torch.mean(grads, axis=(0, 2, 3))
 
 convOutput = convOutput.detach()[0]
 
 #not sure when the best time to use detach is???
-overlay = torch.sum((averagedGrads * convOutput), dim=0).squeeze().detach()
+product = convOutput * averagedGrads[:,None,None]
 
-plt.matshow(overlay)
-plt.show()
+overlay = torch.sum(product, dim=0).squeeze().detach()
 
 # not sure why its inverted, but that is why i subtracted it from 255
-normalizedOverlay = np.uint8(255 - 255 * (overlay - overlay.min()) / (overlay.max() - overlay.min()))
+normalizedOverlay = np.uint8(255 * (overlay - overlay.min()) / (overlay.max() - overlay.min()))
+print(normalizedOverlay)
 
 plt.matshow(normalizedOverlay)
 plt.show()
 
-heatmap = cm.get_cmap("gray")(np.arange(256))[:, :3][normalizedOverlay]
+heatmap = cm.get_cmap("jet")(np.arange(256))[:, :3][normalizedOverlay]
 heatmapImage = np.array(Image.fromarray(np.uint8(255*heatmap)).resize((np.array(image).shape[1],np.array(image).shape[0])))
+plt.matshow(heatmapImage)
+plt.show()
 
-opacity = 0.5
+
+opacity = 0.4
 layered = Image.fromarray((np.array(image) + opacity * heatmapImage).astype('uint8'), 'RGB')
 
 plt.imshow(layered)
