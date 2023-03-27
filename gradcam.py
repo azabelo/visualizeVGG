@@ -1,7 +1,13 @@
+# pytorch autograd package
+# last conv layer index
+
+#in the future try to modularize the code from the very start
+
+import torch
+from torch import nn
 import torchvision.models as models
 import urllib.request
-import torchsummary
-import torch
+from torchsummary import summary
 from torchvision import transforms
 from matplotlib import pyplot as plt
 from torchvision.datasets import Caltech101
@@ -9,7 +15,9 @@ from PIL import Image
 import os
 import operator
 import cv2
+import matplotlib.cm as cm
 import numpy as np
+
 
 def get_images(object_category, data_directory):
     if (not os.path.exists(data_directory)):
@@ -54,24 +62,29 @@ def create_training_data(data_directory):
     print("Datasets constructed")
     return X,Y
 
-
+"""
 dataset = Caltech101(root = "./", download=True)
 X, _ = create_training_data('./Caltech101')
+"""
 
-
-
+# Load the VGG16 model from torchvision
 vgg16 = models.vgg16(pretrained=True)
 
+# Define the indices for splitting the model
+lastConvLayerIndex = 31
 
-# Define the hook function
-def get_layer_output_hook(module, input, output):
-    layer_outputs.append(output)
 
-# Register the hook
-layer_outputs = []
-layer_to_hook = 20 # The index of the layer
-target_layer = vgg16.features[layer_to_hook]
-target_layer.register_forward_hook(get_layer_output_hook)
+# Split the model into two parts based on the defined index
+vgg_LastConv = torch.nn.Sequential(*list(vgg16.features.children())[:lastConvLayerIndex])
+vgg_Classifier = torch.nn.Sequential(*list(vgg16.features.children())[lastConvLayerIndex:], vgg16.avgpool, nn.Flatten(), *list(vgg16.classifier.children()))
+
+
+# Print the summary of both the models
+print("Model Part 1:")
+print(vgg_LastConv)
+summary(vgg_LastConv, (3, 224, 224))
+print("\nModel Part 2:")
+print(vgg_Classifier)
 
 
 transform = transforms.Compose([
@@ -80,18 +93,38 @@ transform = transforms.Compose([
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 ])
 
-# Load image and apply transformations
-imageIndex = 1000
-image = Image.fromarray(X[imageIndex])
-image_tensor = transform(image)
+#image from Caltech101
+#imageIndex = 6500
+#image = Image.fromarray(X[imageIndex])
 
+# or use url:
+# elephant
+url = "https://i.imgur.com/Bvro0YD.png"
+#bus next to car
+url = "https://www.gannett-cdn.com/authoring/2019/12/06/NRCD/ghows-SR-99121660-4c3b-12cb-e053-0100007f872c-63f1b23a.jpeg?width=660&height=471&fit=crop&format=pjpg&auto=webp"
+#two cars
+url = "https://i2-prod.gazettelive.co.uk/incoming/article15379246.ece/ALTERNATES/s615/1_Aston_Martin_Vantage__DB11_Volante-1.jpg"
+
+with urllib.request.urlopen(url) as url:
+    image = Image.open(url)
+
+image = image.convert('RGB')
+image_tensor = transform(image)
 # Add batch dimension to image tensor
 image_tensor = torch.unsqueeze(image_tensor, 0)
 
-# Pass image through VGG16 model and get predictions
-output = vgg16(image_tensor)
-predictions = torch.nn.functional.softmax(output, dim=1)
 
+
+convOutput = vgg_LastConv(image_tensor)
+print(convOutput.shape)
+
+"""last = Image.fromarray(convOutput[0,0,:,:].detach().numpy())
+imgplot = plt.imshow(last)
+plt.show()"""
+
+classifierOutput = vgg_Classifier(convOutput)
+
+predictions = torch.nn.functional.softmax(classifierOutput, dim=1)
 url = "https://raw.githubusercontent.com/anishathalye/imagenet-simple-labels/master/imagenet-simple-labels.json"
 class_names = urllib.request.urlopen(url).read().decode('utf-8').split('\n')
 
@@ -104,43 +137,37 @@ for i in range(5):
     class_name = class_names[class_idx]
     print(f'Class name: {class_name}, Class probability: {class_prob.item()}')
 
-
-featureMaps = layer_outputs[0]
-# Print the output tensor
-print(featureMaps.shape)
-print(vgg16)
-print(torchsummary.summary(vgg16, (3, 144, 144)))
-
-#imgplot = plt.imshow(image)
-#plt.imshow(featureMaps.detach().numpy()[0, featureIndex, :, :], cmap='gray')
-#plt.show()
+#get specific class
+class_idx = class_names.index('"sports car",')
+#based on rankings
+nth_Best = 0
+class_idx = top_predictions.indices[0][nth_Best]
 
 
-fig, axs = plt.subplots(nrows=8, ncols=8, figsize=(16, 16))
-fig.subplots_adjust(hspace=0.1, wspace=0.1)
-# Flatten the grid of subplots into a 1D array
-axs = axs.flatten()
+grads = torch.autograd.grad(outputs=classifierOutput[:, class_idx], inputs=convOutput, grad_outputs=torch.ones_like(classifierOutput[:, class_idx]), create_graph=True)
+grads = grads[0].detach()
 
+averagedGrads = torch.mean(grads, dim=1)
 
-# Loop through the images and plot each one in a subplot
-for i in range(64):
-    # Get the ith image from the array
-    img = featureMaps.detach().numpy()[0, i, :, :]
+convOutput = convOutput.detach()[0]
 
-    # Plot the image in the ith subplot
-    axs[i].imshow(img, cmap='jet')
+#not sure when the best time to use detach is???
+overlay = torch.sum((averagedGrads * convOutput), dim=0).squeeze().detach()
 
-    # Remove the axis ticks and labels from the subplot
-    axs[i].set_xticks([])
-    axs[i].set_yticks([])
-    axs[i].set_xlabel('')
-    axs[i].set_ylabel('')
-
-# Display the plot
+plt.matshow(overlay)
 plt.show()
 
+# not sure why its inverted, but that is why i subtracted it from 255
+normalizedOverlay = np.uint8(255 - 255 * (overlay - overlay.min()) / (overlay.max() - overlay.min()))
 
+plt.matshow(normalizedOverlay)
+plt.show()
 
+heatmap = cm.get_cmap("gray")(np.arange(256))[:, :3][normalizedOverlay]
+heatmapImage = np.array(Image.fromarray(np.uint8(255*heatmap)).resize((np.array(image).shape[1],np.array(image).shape[0])))
 
+opacity = 0.5
+layered = Image.fromarray((np.array(image) + opacity * heatmapImage).astype('uint8'), 'RGB')
 
-
+plt.imshow(layered)
+plt.show()
